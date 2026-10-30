@@ -1,12 +1,15 @@
 import {encrypt,decrypt} from './telegram.js';
 export const MODELS=['gpt-4.1-mini','gpt-4.1','gpt-4o-mini'];
 const fields=['company','web','offer','geo','rate','currency','guarantee','date','offerId','goalId','consumerPrice','consumerCurrency','ar','arMeaning','arMeaningEvidence'];
-export const agreementSchema={type:'object',additionalProperties:false,properties:{...Object.fromEntries(fields.map(f=>[f,{type:['string','null']}])),isAgreement:{type:'boolean'},multipleAgreements:{type:'boolean'},questions:{type:'array',items:{type:'string'}}},required:[...fields,'isAgreement','multipleAgreements','questions']};
+export const agreementSchema={type:'object',additionalProperties:false,properties:{...Object.fromEntries(fields.map(f=>[f,{type:['string','null']}])),company:{type:['string','null'],enum:['Altex','Buyo',null]},isAgreement:{type:'boolean'},multipleAgreements:{type:'boolean'},questions:{type:'array',items:{type:'string'}}},required:[...fields,'isAgreement','multipleAgreements','questions']};
 export function validateExtraction(value,note,{recoverIdentifiers=true}={}){
  if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.isAgreement!=='boolean'||typeof value.multipleAgreements!=='boolean'||!Array.isArray(value.questions)||value.questions.some(q=>typeof q!=='string'))throw Error('ИИ вернул некорректную структуру. Попробуйте ещё раз.');
- const out={};const limits={company:5,web:160,offer:160,geo:80,rate:32,currency:8,guarantee:300,date:10,offerId:32,goalId:32,consumerPrice:32,consumerCurrency:8,ar:80,arMeaning:16,arMeaningEvidence:200};
- for(const f of fields){if(value[f]!==null&&typeof value[f]!=='string')throw Error('ИИ вернул некорректные поля. Попробуйте ещё раз.');if((value[f]||'').length>limits[f])throw Error('ИИ вернул слишком длинное поле. Уточните сообщение.');out[f]=(value[f]||'').trim();}
- if(out.company&&!['Altex','Buyo'].includes(out.company))throw Error('ИИ не смог определить компанию. Укажите Altex или Buyo.');
+ const out={};const limits={company:80,web:160,offer:160,geo:80,rate:32,currency:8,guarantee:300,date:10,offerId:32,goalId:32,consumerPrice:32,consumerCurrency:8,ar:80,arMeaning:16,arMeaningEvidence:200};
+ for(const f of fields){if(value[f]!==null&&typeof value[f]!=='string')throw Error('ИИ вернул некорректные поля. Попробуйте ещё раз.');if((value[f]||'').trim().length>limits[f])throw Error('ИИ вернул слишком длинное поле. Уточните сообщение.');out[f]=(value[f]||'').trim();}
+ const companies={altex:'Altex',buyo:'Buyo','altex cpa':'Altex',biosvet:'Altex'};
+ out.company=companies[out.company.toLowerCase()]||'';
+ if(recoverIdentifiers){const explicit=[...new Set(note.split('\n').map(line=>line.trim().match(/^(?:компания\s*:\s*)?(altex|buyo)$/i)?.[1]?.toLowerCase()).filter(Boolean))];if(explicit.length===1&&!out.company)out.company=companies[explicit[0]];if(explicit.length>1)out.company='';}
+ if(!out.company&&!value.questions.some(q=>/компани|Altex|Buyo/i.test(q)))value.questions=['К какой компании относится договорённость: Altex или Buyo?',...value.questions];
  if(out.rate&&!/^\d+(?:[.,]\d+)?$/.test(out.rate))throw Error('ИИ вернул неоднозначную ставку. Уточните сумму.');out.rate=out.rate.replace(',','.');
  for(const field of ['offerId','goalId'])if(out[field]&&!/^\d+$/.test(out[field]))throw Error('ИИ вернул некорректный ID оффера или цели.');
  if(out.consumerPrice&&!/^\d+(?:[.,]\d+)?$/.test(out.consumerPrice))throw Error('ИИ вернул некорректную цену покупателя.');out.consumerPrice=out.consumerPrice.replace(',','.');
