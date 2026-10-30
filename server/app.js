@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import {randomBytes,createHash} from 'node:crypto';
 const hash=x=>createHash('sha256').update(x).digest('hex');
-export async function application(db,{password,production=false,telegram}={}) {
+export async function application(db,{password,production=false,telegram,ai}={}) {
  if(!password || password.length<12) throw Error('Задайте ADMIN_PASSWORD длиной не менее 12 символов в .env');
  await db.query('INSERT INTO users(username,password) VALUES ($1,$2) ON CONFLICT(username) DO NOTHING',['rama',await bcrypt.hash(password,12)]);
  const app=express();app.disable('x-powered-by');app.set('trust proxy',1);app.use(express.json({limit:'64kb'}));
@@ -20,6 +20,11 @@ export async function application(db,{password,production=false,telegram}={}) {
  app.use('/api',async(req,res,next)=>{try{const token=req.headers.cookie?.split(';').map(x=>x.trim()).find(x=>x.startsWith('session='))?.slice(8);if(!token)return res.status(401).json({error:'Войдите в аккаунт'});const s=await db.query('SELECT user_id FROM sessions WHERE token=$1 AND expires>$2',[hash(token),Date.now()]);if(!s.rows.length)return res.status(401).json({error:'Сессия завершена'});req.sessionToken=hash(token);next();}catch(e){next(e);}});
  app.get('/api/me',(req,res)=>res.json({username:'rama'}));
  app.post('/api/logout',async(req,res,next)=>{try{await db.query('DELETE FROM sessions WHERE token=$1',[req.sessionToken]);res.clearCookie('session',{path:'/'});res.json({ok:true});}catch(e){next(e);}});
+ if(ai){
+ app.get('/api/ai',async(req,res,next)=>{try{res.json(await ai.status());}catch(e){next(e);}});
+ app.post('/api/ai',async(req,res)=>{if(!req.secure&&!['localhost','127.0.0.1','::1'].includes(req.hostname))return res.status(403).json({error:'Для API-ключа нужен HTTPS или localhost'});try{res.json(await ai.configure(req.body.apiKey,req.body.model));}catch(e){res.status(400).json({error:e.message});}});
+ app.delete('/api/ai',async(req,res,next)=>{try{await ai.disconnect();res.json({ok:true});}catch(e){next(e);}});
+ }
  if(telegram){
  app.get('/api/telegram',async(req,res,next)=>{try{res.json(await telegram.status());}catch(e){next(e);}});
  app.post('/api/telegram',async(req,res)=>{const host=req.hostname; if(!req.secure&&!['localhost','127.0.0.1','::1'].includes(host))return res.status(403).json({error:'Для ввода токена нужен HTTPS или localhost на вашем компьютере'});try{res.json(await telegram.configure(req.body.token));}catch(e){res.status(400).json({error:e.message});}});
