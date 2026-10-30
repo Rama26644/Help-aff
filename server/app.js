@@ -35,7 +35,7 @@ export async function application(db,{password,production=false,telegram,ai}={})
  app.post('/api/records',async(req,res,next)=>{try{const {kind,company,data}=req.body;
  if(!kinds.includes(kind)||!['Altex','Buyo'].includes(company)||!data||typeof data!=='object'||Array.isArray(data)||typeof data.title!=='string'||!data.title.trim()||data.title.length>300)return res.status(400).json({error:'Проверьте название и компанию'});
  // Configuration accepts public metadata only. Credentials are deliberately unavailable until adapters exist.
- const allowed=kind==='connection'?['title','note']:['title','note','status','date','affiliateId','externalId','telegram','offer','geo','rate','currency','guarantee'];
+ const allowed=kind==='connection'?['title','note']:['title','note','status','date','affiliateId','externalId','telegram','offer','geo','rate','currency','guarantee','offerId','goalId','consumerPrice','consumerCurrency','ar','arMeaning'];
  const clean=Object.fromEntries(allowed.filter(k=>typeof data[k]==='string'&&data[k].length<=5000).map(k=>[k,data[k]]));
  if(clean.affiliateId){const parent=(await db.query("SELECT id FROM records WHERE id=$1 AND kind='affiliate' AND company=$2",[Number(clean.affiliateId),company])).rows[0];if(!parent)return res.status(400).json({error:'Веб должен принадлежать выбранной компании'});}
  const saved=await db.query('INSERT INTO records(kind,company,data) VALUES($1,$2,$3) RETURNING *',[kind,company,JSON.stringify(clean)]);res.status(201).json(saved.rows[0]);
