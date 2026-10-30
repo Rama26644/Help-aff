@@ -7,6 +7,9 @@ services:
       NODE_ENV: production
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       DATABASE_URL: postgres://rama:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/rama
+      SECRET_DIR: /app/secrets
+    volumes:
+      - telegram_secrets:/app/secrets
     depends_on:
       db:
         condition: service_healthy
@@ -32,3 +35,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
+  telegram_secrets:

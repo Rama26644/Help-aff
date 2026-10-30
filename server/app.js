@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import {randomBytes,createHash} from 'node:crypto';
 const hash=x=>createHash('sha256').update(x).digest('hex');
-export async function application(db,{password,production=false}={}) {
+export async function application(db,{password,production=false,telegram}={}) {
  if(!password || password.length<12) throw Error('Задайте ADMIN_PASSWORD длиной не менее 12 символов в .env');
  await db.query('INSERT INTO users(username,password) VALUES ($1,$2) ON CONFLICT(username) DO NOTHING',['rama',await bcrypt.hash(password,12)]);
  const app=express();app.disable('x-powered-by');app.set('trust proxy',1);app.use(express.json({limit:'64kb'}));
@@ -20,6 +20,11 @@ export async function application(db,{password,production=false}={}) {
  app.use('/api',async(req,res,next)=>{try{const token=req.headers.cookie?.split(';').map(x=>x.trim()).find(x=>x.startsWith('session='))?.slice(8);if(!token)return res.status(401).json({error:'Войдите в аккаунт'});const s=await db.query('SELECT user_id FROM sessions WHERE token=$1 AND expires>$2',[hash(token),Date.now()]);if(!s.rows.length)return res.status(401).json({error:'Сессия завершена'});req.sessionToken=hash(token);next();}catch(e){next(e);}});
  app.get('/api/me',(req,res)=>res.json({username:'rama'}));
  app.post('/api/logout',async(req,res,next)=>{try{await db.query('DELETE FROM sessions WHERE token=$1',[req.sessionToken]);res.clearCookie('session',{path:'/'});res.json({ok:true});}catch(e){next(e);}});
+ if(telegram){
+ app.get('/api/telegram',async(req,res,next)=>{try{res.json(await telegram.status());}catch(e){next(e);}});
+ app.post('/api/telegram',async(req,res)=>{const host=req.hostname; if(!req.secure&&!['localhost','127.0.0.1','::1'].includes(host))return res.status(403).json({error:'Для ввода токена нужен HTTPS или localhost на вашем компьютере'});try{res.json(await telegram.configure(req.body.token));}catch(e){res.status(400).json({error:e.message});}});
+ app.delete('/api/telegram',async(req,res,next)=>{try{await telegram.disconnect();res.json({ok:true});}catch(e){next(e);}});
+ }
  const kinds=['affiliate','task','condition','content','connection'];
  app.get('/api/records',async(req,res,next)=>{try{res.json((await db.query('SELECT * FROM records ORDER BY id DESC')).rows);}catch(e){next(e);}});
  app.post('/api/records',async(req,res,next)=>{try{const {kind,company,data}=req.body;

@@ -8,6 +8,7 @@ FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app /app
+RUN mkdir -p /app/secrets && chown node:node /app/secrets
 USER node
 EXPOSE 3000
 CMD ["node", "server/index.js"]
