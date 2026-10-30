@@ -7,7 +7,10 @@ export async function database(url, directory='.data/postgres') {
  const schema=`CREATE TABLE IF NOT EXISTS users(id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER REFERENCES users(id), expires BIGINT NOT NULL);
  CREATE TABLE IF NOT EXISTS records(id SERIAL PRIMARY KEY, kind TEXT NOT NULL, company TEXT NOT NULL, data JSONB NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW());
+ ALTER TABLE records ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ CREATE TABLE IF NOT EXISTS condition_history(id SERIAL PRIMARY KEY,record_id INTEGER NOT NULL REFERENCES records(id),before_data JSONB NOT NULL,after_data JSONB NOT NULL,before_company TEXT NOT NULL,after_company TEXT NOT NULL,changed_by TEXT NOT NULL,created_at TIMESTAMPTZ DEFAULT NOW());
  CREATE TABLE IF NOT EXISTS telegram_input(owner_id TEXT PRIMARY KEY,draft_id INTEGER NOT NULL,field TEXT NOT NULL,expires BIGINT NOT NULL);
+ CREATE TABLE IF NOT EXISTS scaleo_config(id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL,checked_at TIMESTAMPTZ NOT NULL);
  CREATE TABLE IF NOT EXISTS ai_config(id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL,model TEXT NOT NULL,error TEXT,last_success TIMESTAMPTZ);
  CREATE TABLE IF NOT EXISTS telegram_config(id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL,username TEXT NOT NULL,owner_id TEXT,chat_id TEXT,pair_hash TEXT,pair_expires BIGINT,enabled BOOLEAN DEFAULT true,offset_id BIGINT DEFAULT 0,error TEXT,last_poll TIMESTAMPTZ);
  CREATE TABLE IF NOT EXISTS telegram_drafts(id SERIAL PRIMARY KEY,owner_id TEXT NOT NULL,update_id BIGINT UNIQUE NOT NULL,data JSONB NOT NULL,status TEXT DEFAULT 'pending',created_at TIMESTAMPTZ DEFAULT NOW());`;

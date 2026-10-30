@@ -1,0 +1,17 @@
+const editable=['title','web','externalAffiliateId','offer','offerId','goalId','geo','rate','currency','consumerPrice','consumerCurrency','ar','arMeaning','guarantee','date','note','status'];
+const statuses=['Предложено','Согласовано','Нужно проставить','Проставлено вручную','Проверено вручную'];
+export function registerConditionRoutes(app,db){
+ app.get('/api/conditions/:id/history',async(req,res,next)=>{try{const record=(await db.query("SELECT id FROM records WHERE id=$1 AND kind='condition'",[req.params.id])).rows[0];if(!record)return res.status(404).json({error:'Условия не найдены'});res.json((await db.query('SELECT * FROM condition_history WHERE record_id=$1 ORDER BY id DESC',[record.id])).rows);}catch(e){next(e);}});
+ app.put('/api/conditions/:id',async(req,res,next)=>{try{const {data,company,version}=req.body;if(!data||Array.isArray(data)||typeof data!=='object'||!['Altex','Buyo'].includes(company)||!Number.isSafeInteger(version)||version<1)return res.status(400).json({error:'Некорректные данные условий'});
+ const before=(await db.query("SELECT * FROM records WHERE id=$1 AND kind='condition'",[req.params.id])).rows[0];if(!before)return res.status(404).json({error:'Условия не найдены'});
+ const patch={};for(const f of editable)if(Object.hasOwn(data,f)){if(typeof data[f]!=='string'||data[f].length>(f==='note'?5000:f==='title'?300:500))return res.status(400).json({error:'Проверьте длину и формат полей'});patch[f]=data[f].trim();}
+ const clean={...before.data,...patch};if(!clean.title)return res.status(400).json({error:'Укажите название условий'});
+ for(const f of ['externalAffiliateId','offerId','goalId'])if(clean[f]&&!/^\d+$/.test(clean[f]))return res.status(400).json({error:'ID должен содержать только цифры'});
+ for(const f of ['rate','consumerPrice'])if(clean[f]){if(!/^\d+(?:[.,]\d+)?$/.test(clean[f]))return res.status(400).json({error:'Ставка и цена должны быть неотрицательными числами'});clean[f]=clean[f].replace(',','.');}
+ if(clean.arMeaning&&!['reference','actual','guarantee'].includes(clean.arMeaning))return res.status(400).json({error:'Укажите смысл AR'});
+ if(clean.date&&(!/^\d{4}-\d{2}-\d{2}$/.test(clean.date)||Number.isNaN(Date.parse(clean.date))||new Date(clean.date).toISOString().slice(0,10)!==clean.date))return res.status(400).json({error:'Проверьте дату запуска'});
+ if(clean.status&&!statuses.includes(clean.status))return res.status(400).json({error:'Проверьте статус условий'});
+ if(clean.affiliateId){const parent=(await db.query("SELECT id FROM records WHERE id=$1 AND kind='affiliate' AND company=$2",[clean.affiliateId,company])).rows[0];if(!parent)return res.status(400).json({error:'Связанный веб относится к другой компании'});}
+ const r=await db.query(`WITH old AS (SELECT * FROM records WHERE id=$1 AND kind='condition' AND version=$2 FOR UPDATE), changed AS (UPDATE records r SET data=$3::jsonb,company=$4,version=r.version+1,updated_at=NOW() FROM old WHERE r.id=old.id RETURNING r.*), logged AS (INSERT INTO condition_history(record_id,before_data,after_data,before_company,after_company,changed_by) SELECT old.id,old.data,changed.data,old.company,changed.company,'rama' FROM old,changed RETURNING id) SELECT * FROM changed`,[before.id,version,JSON.stringify(clean),company]);if(!r.rows.length)return res.status(409).json({error:'Условия уже изменены в другой вкладке. Закройте редактор, обновите список и откройте запись снова.'});res.json(r.rows[0]);
+ }catch(e){next(e);}});
+}

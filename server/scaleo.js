@@ -1,0 +1,7 @@
+import {encrypt} from './telegram.js';
+export class ScaleoConnection {
+ constructor(db,key,{fetcher=fetch}={}){this.db=db;this.key=key;this.fetcher=fetcher;}
+ async status(){const c=(await this.db.query('SELECT checked_at FROM scaleo_config WHERE id=1')).rows[0];return {configured:!!c,host:'biosvet.scaletrk.com',checkedAt:c?.checked_at||null,writeSupported:false};}
+ async configure(token){if(typeof token!=='string'||token.length<8||token.length>1024||/\s/.test(token))throw Error('Проверьте менеджерский API-ключ Scaleo');const url=new URL('https://biosvet.scaletrk.com/api/v2/network/affiliates');url.searchParams.set('api-key',token);url.searchParams.set('perPage','1');url.searchParams.set('page','1');let r;try{r=await this.fetcher(url,{redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw Error('Scaleo недоступен. Проверьте соединение.');}if(!r.ok)throw Error([401,403].includes(r.status)?'Scaleo отклонил ключ или права менеджера':r.status===429?'Scaleo ограничил частоту запросов. Повторите позже.':'Не удалось проверить Scaleo');let data;try{data=await r.json();}catch{throw Error('Scaleo вернул неожиданный ответ');}if(!Array.isArray(data?.info?.affiliates))throw Error('Не удалось подтвердить формат API Scaleo');await this.db.query('INSERT INTO scaleo_config(id,token,checked_at) VALUES(1,$1,NOW()) ON CONFLICT(id) DO UPDATE SET token=$1,checked_at=NOW()',[encrypt(token,this.key)]);return this.status();}
+ async disconnect(){await this.db.query('DELETE FROM scaleo_config');}
+}
